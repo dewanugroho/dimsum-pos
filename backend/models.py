@@ -1,7 +1,14 @@
-from sqlalchemy import Column, Integer, String, Boolean, Float, ForeignKey, DateTime
-from sqlalchemy.orm import relationship
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy.orm import relationship
+
 from database import Base
+
+
+def jakarta_now():
+    return datetime.now(ZoneInfo("Asia/Jakarta")).replace(tzinfo=None)
 
 class Product(Base):
     __tablename__ = "products"
@@ -25,7 +32,7 @@ class Transaction(Base):
     payment_method = Column(String) # Cash / QRIS
     total_amount = Column(Float)
     status = Column(String, default="Success")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=jakarta_now, nullable=False)
 
     # Relasi ke detail item yang dibeli
     items = relationship("TransactionItem", back_populates="transaction")
@@ -66,3 +73,37 @@ class RecipeItem(Base):
 
     product = relationship("Product")
     raw_material = relationship("RawMaterial")
+
+
+class Expense(Base):
+    __tablename__ = "expenses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    description = Column(String, nullable=False)
+    amount = Column(Float, nullable=False)
+    category = Column(String, default="Bahan Baku")
+    created_at = Column(DateTime, default=jakarta_now, nullable=False)
+
+
+# --- TABEL USER (RBAC) ---
+VALID_ROLES = {"owner", "kasir", "staff_hpp"}
+
+class User(Base):
+    """
+    Akun pengguna sistem POS.
+
+    Role:
+      owner      — akses penuh (dashboard, laporan, gudang, CRUD menu)
+      kasir      — akses transaksi kasir saja
+      staff_hpp  — akses pencatatan belanja & kalkulator HPP
+    """
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, nullable=False, index=True)
+    # bcrypt hash — JANGAN simpan plain-text password di sini
+    password_hash = Column(String, nullable=False)
+    role = Column(String, nullable=False)          # "owner" | "kasir" | "staff_hpp"
+    full_name = Column(String, nullable=True)      # Nama tampilan opsional
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=jakarta_now, nullable=False)

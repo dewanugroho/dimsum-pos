@@ -1,65 +1,164 @@
-# Dimsum Gembul - Smart POS & AI WhatsApp Assistant
+# Dimsum Gembul POS
 
-Sistem *Point of Sale* (POS) *Full-Stack* dan Asisten Chatbot cerdas yang dirancang untuk mengotomatisasi operasional operasional bisnis F&B (Studi Kasus: Dimsum Gembul). Proyek ini menjembatani transaksi kasir fisik dengan pemesanan *online* otomatis menggunakan AI NLP (*Natural Language Processing*) mutakhir.
+Sistem Point of Sale full-stack untuk operasional F&B, dengan dashboard pemilik, potong stok otomatis, pembayaran QRIS (Midtrans), dan asisten pemesanan WhatsApp berbasis Gemini.
 
-## Fitur Utama
+Proyek ini dibangun sebagai studi kasus **Dimsum Gembul**: menjembatani transaksi kasir di toko dengan pemesanan online yang tercatat di database yang sama.
 
-**1. Smart WhatsApp Bot (Gemini 2.5 Flash)**
-* **Function Calling:** Bot tidak hanya membalas *chat*, tapi mampu memanggil fungsi *backend* untuk mengecek stok (*Real-time*) dan membuat tagihan pembayaran secara mandiri.
-* **Smart Pre-Order Logic:** Diprogram (*Prompt Engineering*) untuk menolak pesanan instan jika stok habis, namun otomatis melakukan negosiasi jika pelanggan memesan untuk *Pre-Order* (acara mendatang).
-* **Midtrans Integration:** Mengirimkan *link* pembayaran QRIS dinamis langsung ke layar *chat* WhatsApp pelanggan.
+## Arsitektur
 
-**2. Point of Sale (POS) - Mode Kasir**
-* **UI Responsif & Cepat:** Keranjang belanja *real-time*, perhitungan kembalian otomatis, dan animasi transisi pembayaran sukses.
-* **Thermal Receipt Preview:** Fitur cetak pratinjau struk bergaya kertas thermal 58mm untuk printer kasir *bluetooth*.
-* **Pencatat Pengeluaran (Expense Tracker):** Formulir cepat untuk kasir mencatat pengeluaran operasional harian (bahan baku).
+```
+┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────┐
+│  React POS UI   │────▶│  FastAPI Kasir API   │────▶│  SQLite + ORM   │
+│  (Vite :5173)   │     │  (Uvicorn :8000)     │     │  products, trx, │
+└─────────────────┘     └──────────▲───────────┘     │  recipes, stock │
+                                   │                 └─────────────────┘
+┌─────────────────┐     ┌──────────┴───────────┐
+│  WhatsApp Clone │────▶│  Bot FastAPI :8001   │
+│  (UI demo chat) │     │  Gemini function call│
+└─────────────────┘     └──────────────────────┘
+                                   │
+                        Midtrans Snap (QRIS)
+```
 
-**3. Owner Dashboard (Enterprise Grade Security)**
-* **JWT Authentication:** Dasbor analitik dikunci menggunakan *JSON Web Token* di sisi *backend*, memastikan keamanan data finansial.
-* **Real-time Analytics:** Visualisasi pergerakan omzet mingguan menggunakan **Recharts**.
-* **Manajemen Gudang:** Pemantauan dan pembaruan stok bahan baku yang terpotong otomatis setiap kali ada transaksi.
+Alur utama:
 
-## 🛠️ Tech Stack
+1. **Kasir** memasukkan item ke keranjang, lalu menyelesaikan pembayaran tunai atau QRIS.
+2. API mencatat transaksi beserta timestamp WIB (`Asia/Jakarta`).
+3. Stok produk (dan bahan baku sesuai resep) dipotong saat transaksi **berhasil**: tunai langsung, QRIS saat webhook Midtrans berstatus `settlement`.
+4. **Dashboard pemilik** dikunci JWT. PIN hanya dicek di backend.
+5. **Bot WhatsApp** membaca menu real-time dan membuat tagihan QRIS lewat API kasir yang sama.
 
-| Kategori | Teknologi | Deskripsi |
-| :--- | :--- | :--- |
-| **Frontend** | React.js, Vite | Antarmuka kasir yang cepat dan reaktif. |
-| **Styling** | Tailwind CSS, Lucide React | Desain UI modern, *clean*, dan profesional. |
-| **Backend** | FastAPI, Python | API berkinerja tinggi untuk memproses transaksi. |
-| **Database** | SQLAlchemy, SQLite | *Object-Relational Mapping* untuk manajemen data. |
-| **AI / NLP** | Google GenAI (Gemini) | Eksekusi *chatbot* dengan fitur *Function Calling*. |
-| **Keamanan** | PyJWT, python-dotenv | Standar keamanan token industri & proteksi rahasia. |
-| **Payment** | Midtrans (Snap API) | Gerbang pembayaran *cashless* (QRIS). |
+## Fitur utama
 
-## ⚙️ Cara Instalasi (Local Development)
+- Kasir cepat: keranjang, hitung kembalian, pratinjau struk thermal 58mm
+- Pembayaran tunai dan QRIS (Midtrans Snap) dengan polling status
+- Potong stok produk + bill of materials otomatis pada transaksi lunas
+- Riwayat penjualan dengan waktu transaksi yang eksplisit
+- Dashboard owner: omzet, HPP, laba, tren 30 hari, gudang, CRUD menu
+- Bot Gemini dengan function calling: cek stok dan buat pesanan QRIS
+- Kredensial sensitif hanya lewat variabel lingkungan
 
-### 1. Persiapan Backend (FastAPI & Bot)
+## Tech stack
+
+| Lapisan | Teknologi |
+| --- | --- |
+| Frontend | React 19, Vite, Tailwind CSS, Axios, Recharts, Lucide |
+| Backend kasir | FastAPI, SQLAlchemy, SQLite, PyJWT |
+| Pembayaran | Midtrans Snap API |
+| Bot | FastAPI, Google GenAI (Gemini 2.5 Flash) |
+| Konfigurasi | python-dotenv, Vite env (`VITE_API_BASE_URL`) |
+
+## Struktur repositori
+
+```
+dimsum-pos/
+├── backend/
+│   ├── main.py            # API kasir, laporan, gudang
+│   ├── bot_wa.py          # asisten chat + UI demo
+│   ├── models.py          # skema database
+│   ├── schemas.py         # kontrak Pydantic
+│   ├── database.py        # engine SQLite
+│   ├── seed.py            # data menu & gudang awal
+│   └── .env.example
+├── frontend/
+│   ├── src/App.jsx        # UI kasir & dashboard
+│   └── .env.example
+├── .env.example
+└── README.md
+```
+
+## Menjalankan dari nol
+
+### Prasyarat
+
+- Python 3.10+
+- Node.js 18+
+- Akun Midtrans (opsional, hanya untuk QRIS)
+- API key Google Gemini (opsional, hanya untuk bot)
+
+### 1. Clone dan siapkan kredensial
+
 ```bash
-# Clone repositori
-git clone [https://github.com/username-anda/dimsum-pos.git](https://github.com/username-anda/dimsum-pos.git)
-cd dimsum-pos/backend
+git clone https://github.com/dewanugroho/dimsum-pos.git
+cd dimsum-pos
 
-# Buat virtual environment & install dependensi
+copy .env.example backend\.env      # Windows
+copy frontend\.env.example frontend\.env
+```
+
+Isi `backend/.env` minimal:
+
+```env
+SECRET_KEY=ganti_dengan_string_rahasia_yang_panjang
+OWNER_PIN=123456
+JWT_EXPIRE_HOURS=12
+MIDTRANS_SERVER_KEY=
+MIDTRANS_IS_PRODUCTION=false
+CORS_ORIGINS=http://127.0.0.1:5173,http://localhost:5173
+GEMINI_API_KEY=
+KASIR_API_URL=http://127.0.0.1:8000
+```
+
+Isi `frontend/.env`:
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+Jangan commit file `.env`.
+
+### 2. Backend kasir
+
+```bash
+cd backend
 python -m venv env
-source env/bin/activate  # Untuk Windows: env\Scripts\activate
+env\Scripts\activate          # macOS/Linux: source env/bin/activate
 pip install -r requirements.txt
+python seed.py
+uvicorn main:app --reload --port 8000
+```
 
-# Buat file .env dan isi dengan kredensial Anda
-echo "SECRET_KEY=rahasia_jwt_anda" >> .env
-echo "MIDTRANS_SERVER_KEY=server_key_midtrans_anda" >> .env
-echo "GEMINI_API_KEY=api_key_gemini_anda" >> .env
+API docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
-# Jalankan Server Kasir (Port 8000)
-uvicorn main:app --reload
+### 3. Frontend kasir
 
-# Jalankan Server Bot WhatsApp (Port 8001)
-python bot_wa.py
+Buka terminal baru:
 
-# Buka terminal baru, masuk ke folder frontend
-cd ../frontend
-
-# Install dependensi
+```bash
+cd frontend
 npm install
-
-# Jalankan server frontend
 npm run dev
+```
+
+Buka [http://127.0.0.1:5173](http://127.0.0.1:5173). Masukkan PIN yang sama dengan `OWNER_PIN` untuk membuka dashboard.
+
+### 4. Bot WhatsApp (opsional)
+
+Pastikan API kasir sudah berjalan di port 8000, lalu:
+
+```bash
+cd backend
+env\Scripts\activate
+python bot_wa.py
+```
+
+Buka [http://127.0.0.1:8001](http://127.0.0.1:8001).
+
+## Catatan operasional
+
+- Timestamp transaksi disimpan dalam zona waktu **WIB** (`YYYY-MM-DD HH:MM:SS`).
+- Pembayaran tunai langsung berstatus `Success` dan memotong stok.
+- Pembayaran QRIS berstatus `Pending` sampai webhook `/webhook/` menerima `settlement`, baru kemudian stok dipotong.
+- Endpoint analitik harian hanya menghitung transaksi `Success`.
+- Jika `MIDTRANS_SERVER_KEY` kosong, kasir tetap bisa dipakai untuk pembayaran tunai.
+- Jika `GEMINI_API_KEY` kosong, UI bot tetap tampil tetapi chat mengembalikan HTTP 503.
+
+## Keamanan
+
+- PIN owner, JWT secret, kunci Midtrans, dan API key Gemini tidak di-hardcode.
+- Token dashboard memiliki masa berlaku (`JWT_EXPIRE_HOURS`).
+- CORS dapat dibatasi lewat `CORS_ORIGINS`.
+
+## Lisensi
+
+Proyek portofolio / studi kasus. Sesuaikan lisensi jika Anda memublikasikan ulang.

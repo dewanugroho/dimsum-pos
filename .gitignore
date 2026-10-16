@@ -1,4 +1,22 @@
 .env
+backend/.env
+frontend/.env
 node_modules/
 env/
+venv/
+.venv/
 __pycache__/
+*.pyc
+.pytest_cache/
+frontend/dist/
+frontend/dist-ssr/
+*.log
+.DS_Store
+
+# Database SQLite — jangan di-push, berisi data produksi
+*.db
+*.sqlite
+*.sqlite3
+
+# File arsip & temporary
+frontend/src/App.old.jsx

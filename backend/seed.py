@@ -1,12 +1,31 @@
-from database import SessionLocal, engine
+﻿from database import SessionLocal, engine
 import models
+from passlib.context import CryptContext
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 # Pastikan semua tabel (termasuk yang baru kita buat) dieksekusi oleh SQLAlchemy
 models.Base.metadata.create_all(bind=engine)
 
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 def seed_data():
     db = SessionLocal()
-    
+    try:
+        _populate_seed_data(db)
+        print("ðŸŽ‰ Proses Seeding Selesai!")
+    except Exception:
+        db.rollback()
+        print("âŒ Proses seeding gagal. Perubahan dibatalkan.")
+        raise
+    finally:
+        db.close()
+
+
+def _populate_seed_data(db):
     # ==========================================
     # 1. SEED DATA PRODUK / MENU KASIR
     # ==========================================
@@ -51,9 +70,9 @@ def seed_data():
         for item in products_data:
             db.add(models.Product(**item))
         db.commit()
-        print(f"✅ Berhasil memasukkan {len(products_data)} menu ke dalam database!")
+        print(f"âœ… Berhasil memasukkan {len(products_data)} menu ke dalam database!")
     else:
-        print("⏭️ Data menu produk sudah ada, melewati proses seed produk.")
+        print("â­ï¸ Data menu produk sudah ada, melewati proses seed produk.")
 
     # ==========================================
     # 2. SEED DATA BAHAN BAKU (GUDANG)
@@ -97,9 +116,9 @@ def seed_data():
         for item in materials_data:
             db.add(models.RawMaterial(**item))
         db.commit()
-        print(f"✅ Berhasil memasukkan {len(materials_data)} Bahan Baku ke Gudang!")
+        print(f"âœ… Berhasil memasukkan {len(materials_data)} Bahan Baku ke Gudang!")
     else:
-        print("⏭️ Data bahan baku sudah ada, melewati proses seed bahan baku.")
+        print("â­ï¸ Data bahan baku sudah ada, melewati proses seed bahan baku.")
 
     # ==========================================
     # 3. SEED DATA RESEP (BILL OF MATERIALS)
@@ -113,7 +132,10 @@ def seed_data():
             
             # Fungsi kecil untuk mencari ID bahan baku dengan mudah
             def get_material(name):
-                return db.query(models.RawMaterial).filter(models.RawMaterial.name == name).first().id
+                material = db.query(models.RawMaterial).filter(models.RawMaterial.name == name).first()
+                if not material:
+                    raise ValueError(f"Bahan baku '{name}' tidak ditemukan.")
+                return material.id
 
             resep_mentai_5 = [
                 {"product_id": mentai_5.id, "raw_material_id": get_material("Adonan Dimsum (Sudah Jadi)"), "quantity_needed": 5},
@@ -129,14 +151,63 @@ def seed_data():
             for bahan in resep_mentai_5:
                 db.add(models.RecipeItem(**bahan))
             db.commit()
-            print("✅ Resep 'Paket Mentai Isi 5' berhasil dipasang ke sistem!")
+            print("âœ… Resep 'Paket Mentai Isi 5' berhasil dipasang ke sistem!")
         else:
-            print("⏭️ Resep untuk 'Paket Mentai Isi 5' sudah ada.")
+            print("â­ï¸ Resep untuk 'Paket Mentai Isi 5' sudah ada.")
     else:
-        print("❌ Peringatan: Produk 'Dimsum Mentai Isi 5 pcs' tidak ditemukan di database.")
+        print("âŒ Peringatan: Produk 'Dimsum Mentai Isi 5 pcs' tidak ditemukan di database.")
 
-    db.close()
-    print("🎉 Proses Seeding Selesai!")
+
+    # ==========================================
+    # 4. SEED AKUN PENGGUNA (RBAC)
+    # ==========================================
+    if db.query(models.User).count() == 0:
+        # Password default dibaca dari env agar tidak ter-hardcode di kode.
+        # Jika tidak di-set, gunakan fallback yang HARUS diganti setelah deploy.
+        default_password = os.getenv("DEFAULT_ADMIN_PASSWORD", "GantiSegera!2025")
+
+        if default_password == "GantiSegera!2025":
+            print("WARNING: DEFAULT_ADMIN_PASSWORD tidak di-set di .env — menggunakan password fallback.")
+            print("   Segera ubah password semua akun setelah seed selesai!")
+
+        users_data = [
+            {
+                "username": "owner",
+                "password": default_password,
+                "role": "owner",
+                "full_name": "Owner Dimsum Gembul",
+            },
+            {
+                "username": "kasir",
+                "password": default_password,
+                "role": "kasir",
+                "full_name": "Kasir Utama",
+            },
+            {
+                "username": "staff_hpp",
+                "password": default_password,
+                "role": "staff_hpp",
+                "full_name": "Staff HPP & Belanja",
+            },
+        ]
+
+        for data in users_data:
+            db.add(models.User(
+                username=data["username"],
+                password_hash=_pwd_context.hash(data["password"]),
+                role=data["role"],
+                full_name=data["full_name"],
+                is_active=True,
+            ))
+
+        db.commit()
+        print(f"OK: Berhasil membuat {len(users_data)} akun pengguna default!")
+        print("   Username : owner | kasir | staff_hpp")
+        print("   Password : (lihat DEFAULT_ADMIN_PASSWORD di .env)")
+        print("   Segera ganti password via endpoint setelah deploy produksi!")
+    else:
+        print("SKIP: Data akun pengguna sudah ada, melewati proses seed user.")
+
 
 if __name__ == "__main__":
     seed_data()

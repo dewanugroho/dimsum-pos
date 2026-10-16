@@ -1,6 +1,7 @@
-from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional
+
+from pydantic import BaseModel, Field
 
 # Skema Dasar (Atribut yang selalu ada)
 class ProductBase(BaseModel):
@@ -27,7 +28,7 @@ class Product(ProductBase):
 # Data yang dikirim dari frontend saat checkout
 class TransactionItemCreate(BaseModel):
     product_id: int
-    quantity: int
+    quantity: int = Field(gt=0)
 
 class TransactionCreate(BaseModel):
     payment_method: str
@@ -44,6 +45,38 @@ class TransactionItemResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class ExpenseCreate(BaseModel):
+    description: str = Field(min_length=1)
+    amount: float = Field(gt=0)
+    category: str = "Bahan Baku"
+
+
+class Expense(BaseModel):
+    id: int
+    description: str
+    amount: float
+    category: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class HppLineInput(BaseModel):
+    raw_material_id: int
+    quantity: float = Field(gt=0)
+
+
+class HppCalculateRequest(BaseModel):
+    portions: float = Field(gt=0)
+    items: List[HppLineInput]
+
+
+class ApplyHppRequest(BaseModel):
+    product_id: int
+    hpp_per_portion: float = Field(ge=0)
+
+
 class TransactionResponse(BaseModel):
     id: str
     payment_method: str
@@ -52,5 +85,34 @@ class TransactionResponse(BaseModel):
     created_at: datetime
     items: List[TransactionItemResponse]
     
+    class Config:
+        from_attributes = True
+
+
+# ─── AUTH / RBAC ────────────────────────────────────────────────────────────
+
+class LoginRequest(BaseModel):
+    """Payload POST /auth/login"""
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+
+class TokenResponse(BaseModel):
+    """Response sukses login — berisi JWT + info akun"""
+    access_token: str
+    token_type: str = "bearer"
+    role: str
+    username: str
+    full_name: Optional[str] = None
+
+
+class UserResponse(BaseModel):
+    """Data akun (tanpa password_hash) — untuk endpoint /auth/me"""
+    id: int
+    username: str
+    role: str
+    full_name: Optional[str] = None
+    is_active: bool
+
     class Config:
         from_attributes = True
